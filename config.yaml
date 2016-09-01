@@ -1,0 +1,38 @@
+
+# host:port for create tarantool 1.5 iproto connection and listen requests
+listen:
+- 127.0.0.1:22033
+- 127.0.0.1:22034
+
+# host:port shard for proxy pass data into tarantool 1.6 connection
+tarantool:
+- ['127.0.0.1:3302', '127.0.0.1:3302']
+- ['127.0.0.1:3303', '127.0.0.1:3303']
+
+# credentials for tarantool database
+# user: "tntuser"
+# password: "tntpassword"
+
+# enable sharding
+sharding_enabled: true
+
+# schema space for 1.5 and 1.6 communicate
+space:
+- id: 0
+  name: key_value
+  fields: ['key:str', 'value:str']
+  index:
+  - id: 0
+    name: pk
+    columns: [0]
+
+- id: 1
+  name: list
+  fields: ['uniq_key:str', 'not_uniq_key:str', 'value:str']
+  index:
+  - id: 0
+    name: pk
+    columns: [0]
+  - id: 1
+    name: fk
+    columns: [1]
