@@ -1,5 +1,4 @@
 # tarantool-proxy
-------------------------------------------------------------
 tarantool-proxy for 15 to 16
 
 repo: https://github.com/shveenkov/tarantool-proxy.git
@@ -10,11 +9,17 @@ repo: https://github.com/shveenkov/tarantool-proxy.git
 * optional sharding, for scale
 
 ## Migrate problems to tarantool 1.6
-1. select where id in (...), you should be rewritten like:
+1. select by multiple key
+```
+select where id in (...)
+```
+
+you should be rewritten like
 ```
 for id in (...):
     select where id=X
 ```
+
 2. sharding specifics
 
 
