@@ -48,19 +48,31 @@ func tarantool_listen(netLoc string, listenNum int, tntPool [][]*tarantool.Conne
 
 func main() {
 	var (
-		config_file string
-		cpuprofile  string
-		memprofile  string
-		netprofile  string
+		configFile string
+		cpuprofile string
+		memprofile string
+		netprofile string
+		logFile    string
+		logFD      *os.File
 	)
 
 	flag.StringVar(&cpuprofile, "cpuprofile", "", "write cpu profile to file")
 	flag.StringVar(&memprofile, "memprofile", "", "write mem profile to file")
 	flag.StringVar(&netprofile, "netprofile", "", "write cpu profile to http://host:port")
-	flag.StringVar(&config_file, "config", "", "config file for tarantool proxy")
+	flag.StringVar(&configFile, "config", "", "config file for tarantool proxy")
+	flag.StringVar(&logFile, "log", "", "log file for tarantool proxy")
 	flag.Parse()
 
-	if config_file == "" {
+	if logFile != "" {
+		f, err := os.OpenFile(logFile, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0664)
+		if err != nil {
+			log.Fatalf("error open log file: %v\n", err)
+		}
+		logFD = f
+		log.SetOutput(logFD)
+	}
+
+	if configFile == "" {
 		log.Fatalf("config file for tarantool proxy must be not empty")
 	}
 
@@ -77,14 +89,14 @@ func main() {
 		defer pprof.StopCPUProfile()
 	}
 
-	yamlData, err := ioutil.ReadFile(config_file)
+	yamlData, err := ioutil.ReadFile(configFile)
 	if err != nil {
 		log.Fatalf("ERROR read yaml config: %s", err)
 	}
 
 	var ProxyConfig ProxyConfigStruct
 	if err := yaml.Unmarshal(yamlData, &ProxyConfig); err != nil {
-		log.Fatalf("ERROR parse yaml config %s: %s", config_file, err)
+		log.Fatalf("ERROR parse yaml config %s: %s", configFile, err)
 	}
 
 	// check listen config
@@ -126,9 +138,6 @@ func main() {
 		log.Fatalf("ERROR: incorrect config count nodes for tarantool and listen param, use the same count or set sharding_enabled=true")
 	}
 
-	signal_chan := make(chan os.Signal, 1)
-	signal.Notify(signal_chan, os.Interrupt, syscall.SIGTERM)
-
 	log.Printf("tarantool-proxy v%s (built w/%s)\n", Version, runtime.Version())
 	if ProxyConfig.Sharding {
 		log.Printf("sharding enabled\n")
@@ -138,8 +147,8 @@ func main() {
 
 	var tntConnectionPool [][]*tarantool.Connection
 	tntOpts := tarantool.Opts{
-		Timeout:       5 * time.Second,
-		Reconnect:     1 * time.Second,
+		Timeout:       7 * time.Second,
+		Reconnect:     2 * time.Second,
 		MaxReconnects: 0, // endlessly
 		User:          ProxyConfig.User,
 		Pass:          ProxyConfig.Password,
@@ -180,8 +189,36 @@ func main() {
 		go tarantool_listen(netLoc, listenNum, tntConnectionPool, NewSchema(&ProxyConfig))
 	}
 
-	wait_sig := <-signal_chan
-	log.Printf("Caught signal %v... shutting down\n", wait_sig)
+	chSignal := make(chan os.Signal, 1)
+	signal.Notify(chSignal, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
+	//signal.Notify(chSignal, syscall.SIGHUP)
+
+WAIT_SIGNAL:
+	for {
+		waitSig := <-chSignal
+		switch waitSig {
+		case syscall.SIGHUP:
+			log.Printf("Caught signal %v... log reopen\n", waitSig)
+			if logFD == nil {
+				continue WAIT_SIGNAL
+			}
+			// log reopen
+			f, err := os.OpenFile(logFile, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0664)
+			if err != nil {
+				log.Printf("error open log file: %v\n", err)
+			}
+			log.SetOutput(f)
+			logFD.Close()
+			logFD = f
+		default:
+			log.Printf("Caught signal %v... shutting down\n", waitSig)
+			break WAIT_SIGNAL
+		} //end switch
+	} //end for
+
+	if logFD != nil {
+		logFD.Close()
+	}
 
 	if memprofile != "" {
 		f, err := os.Create(memprofile)
