@@ -9,19 +9,18 @@ repo: https://github.com/shveenkov/tarantool-proxy.git
 * optional sharding, for scale
 
 ## Migrate problems to tarantool 1.6
-1. select by multiple key
+select by key list:
 ```
-select where id in (...)
-```
-
-you should be rewritten like
-```
-for id in (...):
-    select where id=X
+select where id in (X, Y, Z)
 ```
 
-2. sharding specifics
+you should be rewritten like this:
+```
+for id in (X, Y, Z):
+    select where id=?
+```
 
+sharding specifics and lua calls.
 
 ## Dependencies
 ```
