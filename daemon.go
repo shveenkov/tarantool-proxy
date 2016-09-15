@@ -191,7 +191,6 @@ func main() {
 
 	chSignal := make(chan os.Signal, 1)
 	signal.Notify(chSignal, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
-	//signal.Notify(chSignal, syscall.SIGHUP)
 
 WAIT_SIGNAL:
 	for {

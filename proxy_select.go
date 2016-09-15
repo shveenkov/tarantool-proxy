@@ -25,6 +25,8 @@ func (self *ProxyConnection) executeRequestSelect(requestType uint32, requestId 
 	unpackUint32(reader, &limit)
 	unpackUint32(reader, &count)
 
+	flags = FlagReturnTuple
+
 	space, err := self.schema.GetSpaceInfo(spaceNo)
 	if err != nil {
 		return

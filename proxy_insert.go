@@ -2,7 +2,6 @@ package main
 
 import (
 	"github.com/tarantool/go-tarantool"
-	_ "log"
 )
 
 func (self *ProxyConnection) executeRequestInsert(requestType uint32, requestId uint32,
@@ -37,9 +36,7 @@ func (self *ProxyConnection) executeRequestInsert(requestType uint32, requestId 
 	tnt16 := self.getTnt16Master(args[0])
 	switch {
 	case flags&FlagAdd != 0:
-		//log.Printf("insert: %v\n", args[0])
 		response, err = tnt16.Insert(space.name, args)
-		//log.Printf("insert: %v done\n", args[0])
 	case flags&FlagReplace != 0:
 		response, err = tnt16.Replace(space.name, args)
 	default:
