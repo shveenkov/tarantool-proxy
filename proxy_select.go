@@ -60,7 +60,21 @@ func (self *ProxyConnection) executeRequestSelect(requestType uint32, requestId 
 
 	//sharding for key0
 	tnt16 := self.getTnt16(args[0])
-
 	response, err = tnt16.Select(space.name, indexName, offset, limit, tarantool.IterEq, args)
+	if err == nil {
+		return
+	}
+
+	// make fault tollerance requests
+	for _, tnt16i := range self.getTnt16Pool(args[0]) {
+		if tnt16i == tnt16 {
+			continue
+		}
+
+		response, err = tnt16i.Select(space.name, indexName, offset, limit, tarantool.IterEq, args)
+		if err != nil {
+			break
+		}
+	}
 	return
 }

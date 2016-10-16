@@ -8,6 +8,7 @@ import (
 	"hash/crc32"
 	"io"
 	"log"
+	"math/rand"
 	"reflect"
 	"runtime"
 	"strconv"
@@ -24,18 +25,7 @@ type ProxyConnection struct {
 	schema       *Schema
 	tntPool      [][]*tarantool.Connection
 	tntPoolLen   uint32
-
-	// sharding data
-	listenNum        int
-	shardCounter     []int
-	chanShardCounter chan *ShardCounterFuture
-}
-
-type ShardCounterFuture struct {
-	shardNum   uint32
-	shardIndex int
-	lenPool    int
-	ready      chan struct{}
+	listenNum    int // sharding data
 }
 
 type Response struct {
@@ -78,11 +68,9 @@ func newProxyConnection(conn io.ReadWriteCloser, listenNum int, tntPool [][]*tar
 
 		schema: schema,
 
-		tntPool:          tntPool,
-		tntPoolLen:       uint32(len(tntPool)),
-		listenNum:        listenNum,
-		shardCounter:     make([]int, len(tntPool)),
-		chanShardCounter: make(chan *ShardCounterFuture),
+		tntPool:    tntPool,
+		tntPoolLen: uint32(len(tntPool)),
+		listenNum:  listenNum,
 	}
 
 	return proxy
@@ -108,53 +96,23 @@ func getShardNum(shardingKey interface{}, lenPool uint32) uint32 {
 	return shardNum
 }
 
-func (self *ProxyConnection) getShardNumIndex(shardNum uint32, lenPool int) int {
-	future := &ShardCounterFuture{shardNum, 0, lenPool, make(chan struct{})}
-	self.chanShardCounter <- future
-	<-future.ready
-	return future.shardIndex
+func (self *ProxyConnection) getTnt16Pool(shardingKey interface{}) []*tarantool.Connection {
+	if !self.schema.shardingEnabled {
+		shardNum := uint32(self.listenNum)
+		return self.tntPool[shardNum]
+	}
+
+	shardNum := getShardNum(shardingKey, self.tntPoolLen)
+	return self.tntPool[shardNum]
 }
 
 func (self *ProxyConnection) getTnt16Master(shardingKey interface{}) *tarantool.Connection {
-	if !self.schema.shardingEnabled {
-		return self.tntPool[self.listenNum][0]
-	}
-
-	shardNum := getShardNum(shardingKey, self.tntPoolLen)
-	pool := self.tntPool[shardNum]
-	return pool[0]
+	return self.getTnt16Pool(shardingKey)[0]
 }
 
 func (self *ProxyConnection) getTnt16(shardingKey interface{}) *tarantool.Connection {
-	if !self.schema.shardingEnabled {
-		shardNum := uint32(self.listenNum)
-		pool := self.tntPool[shardNum]
-
-		tntIndex := self.getShardNumIndex(shardNum, len(pool))
-		return pool[tntIndex]
-		//return pool[rand.Intn(len(pool)-1)]
-	}
-
-	shardNum := getShardNum(shardingKey, self.tntPoolLen)
-	pool := self.tntPool[shardNum]
-
-	tntIndex := self.getShardNumIndex(shardNum, len(pool))
-	return pool[tntIndex]
-}
-
-func (self *ProxyConnection) shardCounterFutureRunner() {
-FOR_SHARD_COUNTER:
-	for {
-		select {
-		case <-self.chanCntl:
-			break FOR_SHARD_COUNTER
-		case future := <-self.chanShardCounter:
-			shardNum := future.shardNum
-			future.shardIndex = self.shardCounter[shardNum]
-			self.shardCounter[shardNum] = (self.shardCounter[shardNum] + 1) % future.lenPool
-			close(future.ready)
-		} //end select
-	} //end for
+	pool := self.getTnt16Pool(shardingKey)
+	return pool[rand.Intn(len(pool))]
 }
 
 func (self *ProxyConnection) packTnt16Error(body IprotoWriter, errMsg error) {
@@ -274,7 +232,6 @@ FOR_CLIENT_POLL:
 func (self *ProxyConnection) processIproto() {
 	// bg response process for 15
 	go self.tarantool15SendResponse()
-	go self.shardCounterFutureRunner()
 
 	// https://github.com/tarantool/tarantool/blob/stable/doc/box-protocol.txt
 	mapCall := map[uint32]Tnt15Executor{
@@ -330,6 +287,7 @@ func (self *ProxyConnection) processIproto() {
 				RequestId:   requestId,
 				Body:        body.Bytes(),
 			}
+
 			self.chanResponse <- response
 			continue
 		}
@@ -351,7 +309,10 @@ func (self *ProxyConnection) processIproto() {
 				RequestId:   requestId,
 				Body:        body.Bytes(),
 			}
-			self.chanResponse <- response
+			select {
+			case self.chanResponse <- response:
+			case <-self.chanCntl:
+			}
 
 			<-self.chanSem
 		}()

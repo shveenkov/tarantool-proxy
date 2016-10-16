@@ -37,7 +37,6 @@ func tarantool_listen(netLoc string, listenNum int, tntPool [][]*tarantool.Conne
 
 		//run tarantool15 connection communicate
 		go func() {
-			//log.Printf("Accept ok\n")
 			defer conn.Close()
 
 			proxy := newProxyConnection(conn, listenNum, tntPool, schema)
@@ -77,6 +76,8 @@ func main() {
 	}
 
 	if netprofile != "" {
+		log.Printf("netprofile enabled %s\n", netprofile)
+
 		go http.ListenAndServe(netprofile, nil)
 	}
 
