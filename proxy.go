@@ -62,8 +62,8 @@ func newProxyConnection(conn io.ReadWriteCloser, listenNum int, tntPool [][]*tar
 		reader: bufio.NewReaderSize(conn, 8*1024),
 		writer: bufio.NewWriterSize(conn, 8*1024),
 
-		chanSem:      make(chan struct{}, 10000),
-		chanResponse: make(chan *Response, 100000),
+		chanSem:      make(chan struct{}, 128),
+		chanResponse: make(chan *Response, 128),
 		chanCntl:     make(chan struct{}),
 
 		schema: schema,
