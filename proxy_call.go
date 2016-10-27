@@ -20,6 +20,9 @@ func (self *ProxyConnection) executeRequestCall(requestType uint32, requestId ui
 		return
 	}
 
+	// tarantool 1.5 "request call" always return tuple
+	flags |= FlagReturnTuple
+
 	// parse proc_name
 	fieldLen, err := unpackUint64BER(reader, 64)
 	if err != nil {

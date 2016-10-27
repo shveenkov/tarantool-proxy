@@ -191,8 +191,6 @@ FOR_CLIENT_POLL:
 	for {
 		select {
 		case response = <-self.chanResponse:
-		case <-self.chanCntl:
-			break FOR_CLIENT_POLL
 		default:
 			runtime.Gosched()
 
@@ -311,7 +309,11 @@ func (self *ProxyConnection) processIproto() {
 			}
 			select {
 			case self.chanResponse <- response:
-			case <-self.chanCntl:
+			default:
+				select {
+				case self.chanResponse <- response:
+				case <-self.chanCntl:
+				}
 			}
 
 			<-self.chanSem
