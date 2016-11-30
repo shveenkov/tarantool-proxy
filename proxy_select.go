@@ -72,7 +72,7 @@ func (self *ProxyConnection) executeRequestSelect(requestType uint32, requestId 
 		}
 
 		response, err = tnt16i.Select(space.name, indexName, offset, limit, tarantool.IterEq, args)
-		if err != nil {
+		if err == nil {
 			break
 		}
 	}
