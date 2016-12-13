@@ -4,6 +4,7 @@ import (
 	"io"
 )
 
+// proxy constants
 const (
 	Version = "0.0.1"
 
@@ -28,7 +29,7 @@ const (
 	FlagPing        = 8
 )
 
-// mapping Request Update
+// UpdateOperationCode map code for RequestUpdate
 var UpdateOperationCode = map[uint8]string{
 	0: "=",
 	1: "+",
@@ -38,17 +39,20 @@ var UpdateOperationCode = map[uint8]string{
 	5: ":",
 }
 
+// IprotoReader reader interface for iproto
 type IprotoReader interface {
 	io.ByteReader
 	io.Reader
 	Next(n int) []byte
 }
 
+// IprotoWriter writer interface for iproto
 type IprotoWriter interface {
 	io.Writer
 	WriteString(s string) (n int, err error)
 }
 
+// ProxyConfigStruct yaml config struct
 type ProxyConfigStruct struct {
 	Listen15 []string   `yaml:"listen,flow"`
 	Pass16   [][]string `yaml:"tarantool,flow"`
@@ -56,13 +60,14 @@ type ProxyConfigStruct struct {
 	User     string     `yaml:"user,omitempty"`
 	Password string     `yaml:"password,omitempty"`
 	Space    []struct {
-		Id     uint32   `yaml:"id"`
+		ID     uint32   `yaml:"id"`
 		Name   string   `yaml:"name"`
 		Fields []string `yaml:"fields,flow"`
 		Index  []struct {
-			Id      uint32   `yaml:"id"`
+			ID      uint32   `yaml:"id"`
 			Name    string   `yaml:"name"`
 			Columns []uint32 `yaml:"columns,flow"`
 		}
 	} `yaml:"space,flow"`
 }
+

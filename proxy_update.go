@@ -5,7 +5,7 @@ import (
 	"github.com/tarantool/go-tarantool"
 )
 
-func (self *ProxyConnection) executeRequestUpdate(requestType uint32, requestId uint32,
+func (p *ProxyConnection) executeRequestUpdate(requestType uint32, requestID uint32,
 	reader IprotoReader) (flags uint32, response *tarantool.Response, err error) {
 	// |--------------- header ----------------|---------------request_body --------------...|
 	//  <request_type><body_length><request_id> <space_no><flags><tuple><count><operation>+
@@ -26,7 +26,7 @@ func (self *ProxyConnection) executeRequestUpdate(requestType uint32, requestId 
 	unpackUint32(reader, &spaceNo) // parse space_no
 	unpackUint32(reader, &flags)   // parse flags
 
-	space, err := self.schema.GetSpaceInfo(spaceNo)
+	space, err := p.schema.GetSpaceInfo(spaceNo)
 	if err != nil {
 		return
 	}
@@ -45,8 +45,8 @@ func (self *ProxyConnection) executeRequestUpdate(requestType uint32, requestId 
 
 	unpackUint32(reader, &cardinality) // parse key tuple
 
-	for fieldNo := uint32(0); fieldNo < cardinality; fieldNo += 1 {
-		param, err = self.unpackFieldByDefs(reader, requestType, fieldNo, indexDefs[fieldNo])
+	for fieldNo := uint32(0); fieldNo < cardinality; fieldNo++ {
+		param, err = p.unpackFieldByDefs(reader, requestType, fieldNo, indexDefs[fieldNo])
 		if err != nil {
 			return
 		}
@@ -57,7 +57,7 @@ func (self *ProxyConnection) executeRequestUpdate(requestType uint32, requestId 
 	unpackUint32(reader, &opCount)
 
 	//parse op list
-	for opNo := uint32(0); opNo < opCount; opNo += 1 {
+	for opNo := uint32(0); opNo < opCount; opNo++ {
 		err = unpackUint32(reader, &fieldNo)
 		if err != nil {
 			return
@@ -74,15 +74,16 @@ func (self *ProxyConnection) executeRequestUpdate(requestType uint32, requestId 
 			return
 		}
 
-		param, err = self.unpackFieldByDefs(reader, requestType, fieldNo, fieldDefs[fieldNo])
+		param, err = p.unpackFieldByDefs(reader, requestType, fieldNo, fieldDefs[fieldNo])
 		if err != nil {
 			return
 		}
 		args = append(args, []interface{}{opSymbol, fieldNo, param})
 	} //end for opCount
 
-	tnt16 := self.getTnt16Master(keyTuple[0])
+	tnt16 := p.getTnt16Master(keyTuple[0])
 
 	response, err = tnt16.Update(space.name, indexName, keyTuple, args)
 	return
 }
+

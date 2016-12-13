@@ -16,6 +16,7 @@ import (
 	"unsafe"
 )
 
+//ProxyConnection control struct
 type ProxyConnection struct {
 	reader       *bufio.Reader
 	writer       *bufio.Writer
@@ -28,12 +29,14 @@ type ProxyConnection struct {
 	listenNum    int // sharding data
 }
 
+// Response iproto package
 type Response struct {
 	RequestType uint32
-	RequestId   uint32
+	RequestID   uint32
 	Body        []byte
 }
 
+// Tnt15Executor iproto request executor func
 type Tnt15Executor func(uint32, uint32, IprotoReader) (flags uint32, response *tarantool.Response, err error)
 
 const maxPoolCap = 2048
@@ -96,32 +99,32 @@ func getShardNum(shardingKey interface{}, lenPool uint32) uint32 {
 	return shardNum
 }
 
-func (self *ProxyConnection) getTnt16Pool(shardingKey interface{}) []*tarantool.Connection {
-	if !self.schema.shardingEnabled {
-		shardNum := uint32(self.listenNum)
-		return self.tntPool[shardNum]
+func (p *ProxyConnection) getTnt16Pool(shardingKey interface{}) []*tarantool.Connection {
+	if !p.schema.shardingEnabled {
+		shardNum := uint32(p.listenNum)
+		return p.tntPool[shardNum]
 	}
 
-	shardNum := getShardNum(shardingKey, self.tntPoolLen)
-	return self.tntPool[shardNum]
+	shardNum := getShardNum(shardingKey, p.tntPoolLen)
+	return p.tntPool[shardNum]
 }
 
-func (self *ProxyConnection) getTnt16Master(shardingKey interface{}) *tarantool.Connection {
-	return self.getTnt16Pool(shardingKey)[0]
+func (p *ProxyConnection) getTnt16Master(shardingKey interface{}) *tarantool.Connection {
+	return p.getTnt16Pool(shardingKey)[0]
 }
 
-func (self *ProxyConnection) getTnt16(shardingKey interface{}) *tarantool.Connection {
-	pool := self.getTnt16Pool(shardingKey)
+func (p *ProxyConnection) getTnt16(shardingKey interface{}) *tarantool.Connection {
+	pool := p.getTnt16Pool(shardingKey)
 	return pool[rand.Intn(len(pool))]
 }
 
-func (self *ProxyConnection) packTnt16Error(body IprotoWriter, errMsg error) {
+func (p *ProxyConnection) packTnt16Error(body IprotoWriter, errMsg error) {
 	PackUint32(body, (ErrorUnpackData<<8)|BadResponse15Status)
 	errStr := errMsg.Error()
 	body.WriteString(errStr)
 }
 
-func (self *ProxyConnection) packTnt16ResponseBody(body IprotoWriter, response *tarantool.Response, flags uint32) {
+func (p *ProxyConnection) packTnt16ResponseBody(body IprotoWriter, response *tarantool.Response, flags uint32) {
 	if response.Code != 0 {
 		PackUint32(body, (response.Code<<8)|BadResponse15Status)
 		body.WriteString(response.Error)
@@ -145,9 +148,9 @@ func (self *ProxyConnection) packTnt16ResponseBody(body IprotoWriter, response *
 		return
 	}
 
-	tuple_buf := getBytesBufferFromPool()
+	tupleBuf := getBytesBufferFromPool()
 	for _, tuple := range response.Data {
-		tuple_buf.Reset()
+		tupleBuf.Reset()
 		tupleIter, ok := tuple.([]interface{})
 		if !ok {
 			tupleIter = []interface{}{tuple}
@@ -155,55 +158,55 @@ func (self *ProxyConnection) packTnt16ResponseBody(body IprotoWriter, response *
 		for _, iValue := range tupleIter {
 			switch val := iValue.(type) {
 			case uint32:
-				packUint64BER(tuple_buf, 4)
-				PackUint32(tuple_buf, uint32(val))
+				packUint64BER(tupleBuf, 4)
+				PackUint32(tupleBuf, uint32(val))
 			case uint64:
-				packUint64BER(tuple_buf, 4)
-				PackUint32(tuple_buf, uint32(val))
+				packUint64BER(tupleBuf, 4)
+				PackUint32(tupleBuf, uint32(val))
 			case int64:
-				packUint64BER(tuple_buf, 4)
-				PackUint32(tuple_buf, uint32(val))
+				packUint64BER(tupleBuf, 4)
+				PackUint32(tupleBuf, uint32(val))
 			case string:
-				packUint64BER(tuple_buf, uint64(len(val)))
-				tuple_buf.WriteString(val)
+				packUint64BER(tupleBuf, uint64(len(val)))
+				tupleBuf.WriteString(val)
 			default:
 				// return nil, fmt.Errorf("error pack value: %v(%T)", val, val)
 				log.Printf("error pack value: %v(%T)", val, val)
-				tuple_buf.WriteString("")
+				tupleBuf.WriteString("")
 			} //end switch*/
 		} //end for
 
-		PackUint32(body, uint32(tuple_buf.Len()))
+		PackUint32(body, uint32(tupleBuf.Len()))
 		// add cardinality
 		PackUint32(body, uint32(len(tupleIter)))
 
-		io.Copy(body, tuple_buf)
+		io.Copy(body, tupleBuf)
 	} //end for
-	putBytesBufferToPool(tuple_buf)
+	putBytesBufferToPool(tupleBuf)
 	return
 }
 
-func (self *ProxyConnection) tarantool15SendResponse() {
+func (p *ProxyConnection) tarantool15SendResponse() {
 	header := &bytes.Buffer{}
 	var response *Response
 
 FOR_CLIENT_POLL:
 	for {
 		select {
-		case response = <-self.chanResponse:
+		case response = <-p.chanResponse:
 		default:
 			runtime.Gosched()
 
-			if len(self.chanResponse) == 0 {
-				if err := self.writer.Flush(); err != nil {
+			if len(p.chanResponse) == 0 {
+				if err := p.writer.Flush(); err != nil {
 					log.Println("client close connection")
 					break FOR_CLIENT_POLL
 				} //end if
 			}
 
 			select {
-			case response = <-self.chanResponse:
-			case <-self.chanCntl:
+			case response = <-p.chanResponse:
+			case <-p.chanCntl:
 				break FOR_CLIENT_POLL
 			} //end select
 		} //end select
@@ -212,33 +215,33 @@ FOR_CLIENT_POLL:
 
 		PackUint32(header, response.RequestType)
 		PackUint32(header, uint32(len(response.Body)))
-		PackUint32(header, response.RequestId)
+		PackUint32(header, response.RequestID)
 
-		if _, err := self.writer.Write(header.Bytes()); err != nil {
+		if _, err := p.writer.Write(header.Bytes()); err != nil {
 			log.Printf("error write response header: %s", err)
 		}
 
-		if _, err := self.writer.Write(response.Body); err != nil {
+		if _, err := p.writer.Write(response.Body); err != nil {
 			log.Printf("error write response body: %s", err)
 		}
 		putBytesBufferToPool(bytes.NewBuffer(response.Body))
 	} //end for
 
-	// self.writer.Flush()
+	// p.writer.Flush()
 }
 
-func (self *ProxyConnection) processIproto() {
+func (p *ProxyConnection) processIproto() {
 	// bg response process for 15
-	go self.tarantool15SendResponse()
+	go p.tarantool15SendResponse()
 
 	// https://github.com/tarantool/tarantool/blob/stable/doc/box-protocol.txt
 	mapCall := map[uint32]Tnt15Executor{
-		RequestTypeSelect: self.executeRequestSelect,
-		RequestTypeCall:   self.executeRequestCall,
-		RequestTypeInsert: self.executeRequestInsert,
-		RequestTypeDelete: self.executeRequestDelete,
-		RequestTypeUpdate: self.executeRequestUpdate,
-		RequestTypePing:   self.executeRequestPing,
+		RequestTypeSelect: p.executeRequestSelect,
+		RequestTypeCall:   p.executeRequestCall,
+		RequestTypeInsert: p.executeRequestInsert,
+		RequestTypeDelete: p.executeRequestDelete,
+		RequestTypeUpdate: p.executeRequestUpdate,
+		RequestTypePing:   p.executeRequestPing,
 	}
 
 	// shared buffer for parse header
@@ -247,12 +250,12 @@ func (self *ProxyConnection) processIproto() {
 		var (
 			requestType uint32
 			bodyLength  uint32
-			requestId   uint32
+			requestID   uint32
 		)
 
 		//read iproto header
 		iprotoHeader.Reset()
-		_, err := io.CopyN(iprotoHeader, self.reader, 12)
+		_, err := io.CopyN(iprotoHeader, p.reader, 12)
 		if err != nil {
 			if err != io.EOF {
 				log.Printf("error read header15: - %s", err)
@@ -262,11 +265,11 @@ func (self *ProxyConnection) processIproto() {
 
 		unpackUint32(iprotoHeader, &requestType)
 		unpackUint32(iprotoHeader, &bodyLength)
-		unpackUint32(iprotoHeader, &requestId)
+		unpackUint32(iprotoHeader, &requestID)
 
 		//read iproto body
 		iprotoPackage := getBytesBufferFromPool()
-		_, err = io.CopyN(iprotoPackage, self.reader, int64(bodyLength))
+		_, err = io.CopyN(iprotoPackage, p.reader, int64(bodyLength))
 		if err != nil {
 			if err != io.EOF {
 				log.Printf("error read body15: - %s", err)
@@ -278,59 +281,60 @@ func (self *ProxyConnection) processIproto() {
 		if !ok {
 			err := fmt.Errorf("unknown request type15: %d", requestType)
 			body := getBytesBufferFromPool()
-			self.packTnt16Error(body, err)
+			p.packTnt16Error(body, err)
 
 			response := &Response{
 				RequestType: requestType,
-				RequestId:   requestId,
+				RequestID:   requestID,
 				Body:        body.Bytes(),
 			}
 
-			self.chanResponse <- response
+			p.chanResponse <- response
 			continue
 		}
 
-		self.chanSem <- struct{}{}
+		p.chanSem <- struct{}{}
 		go func() {
-			flags, tnt16Response, err := requestExecutor(requestType, requestId, iprotoPackage)
+			flags, tnt16Response, err := requestExecutor(requestType, requestID, iprotoPackage)
 			putBytesBufferToPool(iprotoPackage)
 
 			body := getBytesBufferFromPool()
 			if err != nil {
-				self.packTnt16Error(body, err)
+				p.packTnt16Error(body, err)
 			} else {
-				self.packTnt16ResponseBody(body, tnt16Response, flags)
+				p.packTnt16ResponseBody(body, tnt16Response, flags)
 			}
 
 			response := &Response{
 				RequestType: requestType,
-				RequestId:   requestId,
+				RequestID:   requestID,
 				Body:        body.Bytes(),
 			}
 			select {
-			case self.chanResponse <- response:
+			case p.chanResponse <- response:
 			default:
 				select {
-				case self.chanResponse <- response:
-				case <-self.chanCntl:
+				case p.chanResponse <- response:
+				case <-p.chanCntl:
 				}
 			}
 
-			<-self.chanSem
+			<-p.chanSem
 		}()
 	} //end for
 
 	// close control chan for stop tarantool15SendResponse
-	close(self.chanCntl)
+	close(p.chanCntl)
 }
 
+// BytesToString without alloc
 func BytesToString(b []byte) string {
 	bh := (*reflect.SliceHeader)(unsafe.Pointer(&b))
 	sh := reflect.StringHeader{bh.Data, bh.Len}
 	return *(*string)(unsafe.Pointer(&sh))
 }
 
-func (self *ProxyConnection) unpackFieldByDefs(reader IprotoReader, requestType, fieldNo uint32, fieldType string) (val interface{}, err error) {
+func (p *ProxyConnection) unpackFieldByDefs(reader IprotoReader, requestType, fieldNo uint32, fieldType string) (val interface{}, err error) {
 	fieldLen, err := unpackUint64BER(reader, 64)
 	if err != nil {
 		return

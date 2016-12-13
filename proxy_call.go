@@ -4,7 +4,7 @@ import (
 	"github.com/tarantool/go-tarantool"
 )
 
-func (self *ProxyConnection) executeRequestCall(requestType uint32, requestId uint32,
+func (p *ProxyConnection) executeRequestCall(requestType uint32, requestID uint32,
 	reader IprotoReader) (flags uint32, response *tarantool.Response, err error) {
 	//|--------------- header ----------------|-----request_body -------|
 	// <request_type><body_length><request_id> <flags><proc_name><tuple>
@@ -36,8 +36,8 @@ func (self *ProxyConnection) executeRequestCall(requestType uint32, requestId ui
 		return
 	}
 
-	for fieldNo := uint32(0); fieldNo < cardinality; fieldNo += 1 {
-		param, err = self.unpackFieldByDefs(reader, requestType, fieldNo, SchemaTypeStr)
+	for fieldNo := uint32(0); fieldNo < cardinality; fieldNo++ {
+		param, err = p.unpackFieldByDefs(reader, requestType, fieldNo, SchemaTypeStr)
 		if err != nil {
 			return
 		}
@@ -46,9 +46,9 @@ func (self *ProxyConnection) executeRequestCall(requestType uint32, requestId ui
 
 	var tnt16 *tarantool.Connection
 	if len(args) > 0 {
-		tnt16 = self.getTnt16Master(args[0])
+		tnt16 = p.getTnt16Master(args[0])
 	} else {
-		tnt16 = self.getTnt16Master(procName)
+		tnt16 = p.getTnt16Master(procName)
 	}
 
 	response, err = tnt16.Call(procName, args)

@@ -7,14 +7,17 @@ import (
 	"strings"
 )
 
+// tarantool 1.5 schema types
 const (
 	SchemaTypeInt   = "int"
 	SchemaTypeInt64 = "int64"
 	SchemaTypeStr   = "str"
 )
 
+// FieldDefs iproto field defs for 1.5
 type FieldDefs map[uint32]string
 
+// SpaceInfo space info for 1.5
 type SpaceInfo struct {
 	name          string
 	indexMap      FieldDefs
@@ -22,15 +25,17 @@ type SpaceInfo struct {
 	typeIndexMap  map[uint32]FieldDefs
 }
 
+// Schema tarantool 1.5 schema
 type Schema struct {
 	shardingEnabled bool
-	spaceInfoById   map[uint32]*SpaceInfo
+	spaceInfoByID   map[uint32]*SpaceInfo
 }
 
+// NewSchema constuctor
 func NewSchema(proxyConfig *ProxyConfigStruct) *Schema {
-	SpaceInfoById := make(map[uint32]*SpaceInfo)
+	SpaceInfoByID := make(map[uint32]*SpaceInfo)
 
-	// init SpaceInfoById from config
+	// init SpaceInfoByID from config
 	for _, space := range proxyConfig.Space {
 		info := SpaceInfo{
 			name:          space.Name,
@@ -52,7 +57,7 @@ func NewSchema(proxyConfig *ProxyConfigStruct) *Schema {
 		// mapping index_id => index_name
 		// mapping index_id => [column1_type, column2_type, ...]
 		for _, index := range space.Index {
-			info.indexMap[index.Id] = index.Name
+			info.indexMap[index.ID] = index.Name
 
 			var indexTypeColumns = make(map[uint32]string)
 			for columnNum, column := range index.Columns {
@@ -62,45 +67,49 @@ func NewSchema(proxyConfig *ProxyConfigStruct) *Schema {
 				}
 				indexTypeColumns[uint32(columnNum)] = fieldType
 			} //end for
-			info.typeIndexMap[index.Id] = indexTypeColumns
+			info.typeIndexMap[index.ID] = indexTypeColumns
 		} //end for
 
-		SpaceInfoById[space.Id] = &info
+		SpaceInfoByID[space.ID] = &info
 	}
 
 	return &Schema{
 		shardingEnabled: proxyConfig.Sharding,
-		spaceInfoById:   SpaceInfoById,
+		spaceInfoByID:   SpaceInfoByID,
 	}
 }
 
-func (self *Schema) GetSpaceInfo(spaceId15 uint32) (*SpaceInfo, error) {
-	spaceInfo, ok := self.spaceInfoById[spaceId15]
+// GetSpaceInfo get space info for 1.5 
+func (p *Schema) GetSpaceInfo(spaceID15 uint32) (*SpaceInfo, error) {
+	spaceInfo, ok := p.spaceInfoByID[spaceID15]
 	if !ok {
-		err := fmt.Errorf("space with id: %d does not exists in tarantool config", spaceId15)
+		err := fmt.Errorf("space with id: %d does not exists in tarantool config", spaceID15)
 		return nil, err
 	}
 	return spaceInfo, nil
 }
 
-func (self *SpaceInfo) GetIndexName(indexId15 uint32) (string, error) {
-	indexName, ok := self.indexMap[indexId15]
+// GetIndexName get index name from space
+func (p *SpaceInfo) GetIndexName(indexID15 uint32) (string, error) {
+	indexName, ok := p.indexMap[indexID15]
 	if !ok {
-		err := fmt.Errorf("index with id: %d, space_name: %s does not exists in tarantool config", indexId15, self.name)
+		err := fmt.Errorf("index with id: %d, space_name: %s does not exists in tarantool config", indexID15, p.name)
 		return "", err
 	}
 	return indexName, nil
 }
 
-func (self *SpaceInfo) GetIndexDefs(indexId15 uint32) (FieldDefs, error) {
-	indexDefs, ok := self.typeIndexMap[indexId15]
+// GetIndexDefs return index defs, name cardinality, etc
+func (p *SpaceInfo) GetIndexDefs(indexID15 uint32) (FieldDefs, error) {
+	indexDefs, ok := p.typeIndexMap[indexID15]
 	if !ok {
-		err := fmt.Errorf("index with id: %d, space_name: %s does not exists in tarantool config", indexId15, self.name)
+		err := fmt.Errorf("index with id: %d, space_name: %s does not exists in tarantool config", indexID15, p.name)
 		return nil, err
 	}
 	return indexDefs, nil
 }
 
+// PackUint32 pack Uint32
 func PackUint32(w io.Writer, v uint32) error {
 	_, err := w.Write([]byte{
 		byte(v),
@@ -111,6 +120,7 @@ func PackUint32(w io.Writer, v uint32) error {
 	return err
 }
 
+// PackUint64 pack Uint64
 func PackUint64(w io.Writer, v uint64) error {
 	_, err := w.Write([]byte{
 		byte(v),
@@ -164,7 +174,7 @@ func unpackUint64BER(r io.ByteReader, valueBits int) (v uint64, err error) {
 			return
 		}
 	}
-	return 0, fmt.Errorf("invalid ber-encoded integer: %s!", err.Error())
+	return 0, fmt.Errorf("invalid ber-encoded integer: %s ", err.Error())
 }
 
 func unpackUint64Bytes(data []byte) (ret uint32) {

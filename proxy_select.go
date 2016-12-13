@@ -4,7 +4,7 @@ import (
 	"github.com/tarantool/go-tarantool"
 )
 
-func (self *ProxyConnection) executeRequestSelect(requestType uint32, requestId uint32,
+func (p *ProxyConnection) executeRequestSelect(requestType uint32, requestID uint32,
 	reader IprotoReader) (flags uint32, response *tarantool.Response, err error) {
 	//|--------------- header ----------------|---------------request_body ---------------------...|
 	// <request_type><body_length><request_id> <space_no><index_no><offset><limit><count><tuple>+
@@ -27,7 +27,7 @@ func (self *ProxyConnection) executeRequestSelect(requestType uint32, requestId 
 
 	flags = FlagReturnTuple
 
-	space, err := self.schema.GetSpaceInfo(spaceNo)
+	space, err := p.schema.GetSpaceInfo(spaceNo)
 	if err != nil {
 		return
 	}
@@ -43,14 +43,14 @@ func (self *ProxyConnection) executeRequestSelect(requestType uint32, requestId 
 	}
 
 	// далее лежат упакованные iproto tuple-ы
-	for i := uint32(0); i < count; i += 1 {
+	for i := uint32(0); i < count; i++ {
 		err = unpackUint32(reader, &cardinality)
 		if err != nil {
 			return
 		}
 
-		for fieldNo := uint32(0); fieldNo < cardinality; fieldNo += 1 {
-			param, err = self.unpackFieldByDefs(reader, requestType, fieldNo, indexDefs[fieldNo])
+		for fieldNo := uint32(0); fieldNo < cardinality; fieldNo++ {
+			param, err = p.unpackFieldByDefs(reader, requestType, fieldNo, indexDefs[fieldNo])
 			if err != nil {
 				return
 			}
@@ -59,14 +59,14 @@ func (self *ProxyConnection) executeRequestSelect(requestType uint32, requestId 
 	} //end for
 
 	//sharding for key0
-	tnt16 := self.getTnt16(args[0])
+	tnt16 := p.getTnt16(args[0])
 	response, err = tnt16.Select(space.name, indexName, offset, limit, tarantool.IterEq, args)
 	if err == nil {
 		return
 	}
 
 	// make fault tollerance requests
-	for _, tnt16i := range self.getTnt16Pool(args[0]) {
+	for _, tnt16i := range p.getTnt16Pool(args[0]) {
 		if tnt16i == tnt16 {
 			continue
 		}

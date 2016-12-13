@@ -22,7 +22,7 @@ import (
 	_ "net/http/pprof"
 )
 
-func tarantool_listen(netLoc string, listenNum int, tntPool [][]*tarantool.Connection, schema *Schema) {
+func tarantoolListen(netLoc string, listenNum int, tntPool [][]*tarantool.Connection, schema *Schema) {
 	listener, err := net.Listen("tcp", netLoc)
 	if err != nil {
 		log.Fatalf("ERROR: Listen - %s", err)
@@ -163,8 +163,8 @@ func main() {
 			log.Printf("connect_16 %s\n", netLoc)
 		}
 
-		for i := 0; i < Tnt16PoolSize; i += 1 {
-			for j := 0; j < len(shard); j += 1 {
+		for i := 0; i < Tnt16PoolSize; i++ {
+			for j := 0; j < len(shard); j++ {
 				tnt16, err := tarantool.Connect(shard[j], tntOpts)
 				if err != nil {
 					log.Fatalf("Failed to connect: %s", err.Error())
@@ -187,7 +187,7 @@ func main() {
 
 	for listenNum, netLoc := range ProxyConfig.Listen15 {
 		log.Printf("listen_15 %s\n", netLoc)
-		go tarantool_listen(netLoc, listenNum, tntConnectionPool, NewSchema(&ProxyConfig))
+		go tarantoolListen(netLoc, listenNum, tntConnectionPool, NewSchema(&ProxyConfig))
 	}
 
 	chSignal := make(chan os.Signal, 1)
