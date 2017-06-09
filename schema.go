@@ -177,15 +177,15 @@ func unpackUint64BER(r io.ByteReader, valueBits int) (v uint64, err error) {
 	return 0, fmt.Errorf("invalid ber-encoded integer: %s ", err.Error())
 }
 
-func unpackUint64Bytes(data []byte) (ret uint32) {
-	ret = uint32(data[0])
-	ret += uint32(data[1]) << 8
-	ret += uint32(data[2]) << 16
-	ret += uint32(data[3]) << 24
-	ret += uint32(data[4]) << 32
-	ret += uint32(data[5]) << 40
-	ret += uint32(data[6]) << 48
-	ret += uint32(data[7]) << 56
+func unpackUint64Bytes(data []byte) (ret uint64) {
+	ret = uint64(data[0])
+	ret += uint64(data[1]) << 8
+	ret += uint64(data[2]) << 16
+	ret += uint64(data[3]) << 24
+	ret += uint64(data[4]) << 32
+	ret += uint64(data[5]) << 40
+	ret += uint64(data[6]) << 48
+	ret += uint64(data[7]) << 56
 	return
 }
 
