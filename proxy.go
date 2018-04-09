@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
-	"github.com/tarantool/go-tarantool"
 	"hash/crc32"
 	"io"
 	"log"
@@ -14,6 +13,9 @@ import (
 	"strconv"
 	"sync"
 	"unsafe"
+
+	"github.com/quipo/statsd"
+	"github.com/tarantool/go-tarantool"
 )
 
 //ProxyConnection control struct
@@ -44,6 +46,8 @@ const maxPoolCap = 2048
 var bytesBufferPool = sync.Pool{
 	New: func() interface{} { return bytes.NewBuffer(make([]byte, 0, 64)) },
 }
+
+var statsdClient = statsd.NewStatsdClient("localhost:8125", "prefix")
 
 func getBytesBufferFromPool() (b *bytes.Buffer) {
 	ifc := bytesBufferPool.Get()
