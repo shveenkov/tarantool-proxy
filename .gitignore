@@ -1,5 +1,3 @@
 *.exe
 tarantool-proxy
-Gopkg.lock
-Gopkg.toml
 
