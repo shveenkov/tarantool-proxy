@@ -65,7 +65,6 @@ func (p *ProxyConnection) executeRequestSelect(requestType uint32, requestID uin
 		p.statsdClient.Incr("select", 1)
 		return
 	}
-	p.statsdClient.Incr("error_16", 1)
 
 	// make fault tollerance requests
 	for _, tnt16i := range p.getTnt16Pool(args[0]) {
@@ -78,7 +77,7 @@ func (p *ProxyConnection) executeRequestSelect(requestType uint32, requestID uin
 			p.statsdClient.Incr("select", 1)
 			break
 		}
-		p.statsdClient.Incr("error_16", 1)
 	}
+	p.statsdClient.Incr("error_16", 1)
 	return
 }
