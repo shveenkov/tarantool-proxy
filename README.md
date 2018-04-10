@@ -53,8 +53,8 @@ sharding_enabled: true
 
 # enable send report to statsd
 statsd:
-  server: 127.0.0.1:8125
-  prefix: tarantool.%HOST%.proxy
+  server: '127.0.0.1:8125'
+  prefix: 'tarantool.%HOST%.proxy'
 
 # schema space for 1.5 and 1.6 communicate
 space:

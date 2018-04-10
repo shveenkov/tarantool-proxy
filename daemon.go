@@ -50,8 +50,21 @@ func createStatsdClient(addr, prefix string) (client statsd.Statsd) {
 		client = statsd.NoopClient{}
 		return
 	}
-	statsdSock := statsd.NewStatsdClient(addr, prefix)
-	err := statsdSock.CreateSocket()
+
+	hostname, err := os.Hostname()
+	if err != nil {
+		hostname = "unknown"
+	} else {
+		hostname = strings.SplitN(hostname, ".", 2)[0]
+	}
+
+	hostPrefix := strings.Replace(prefix, "%HOST%", hostname, 1)
+	if hostPrefix != "" && !strings.HasSuffix(hostPrefix, ".") {
+		hostPrefix = hostPrefix + "."
+	}
+
+	statsdSock := statsd.NewStatsdClient(addr, hostPrefix)
+	err = statsdSock.CreateSocket()
 	if err != nil {
 		log.Printf("error create statsd socket: %s\n", err)
 		client = statsd.NoopClient{}
