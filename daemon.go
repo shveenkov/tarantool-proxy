@@ -74,7 +74,7 @@ func createStatsdClient(addr, prefix string) (client statsd.Statsd) {
 	interval := time.Second * 2 // aggregate stats and flush every 2 seconds
 	client = statsd.NewStatsdBuffer(interval, statsdSock)
 
-	log.Printf("enable send metrics to statsd: %s; %s\n", addr, prefix)
+	log.Printf("enable send metrics to statsd: %s; %s\n", addr, hostPrefix)
 
 	return
 }
