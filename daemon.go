@@ -57,8 +57,12 @@ func createStatsdClient(addr, prefix string) (client statsd.Statsd) {
 		client = statsd.NoopClient{}
 		return
 	}
+	statsd.UDPPayloadSize = 8 * 1024
 	interval := time.Second * 2 // aggregate stats and flush every 2 seconds
 	client = statsd.NewStatsdBuffer(interval, statsdSock)
+
+	log.Printf("enable send metrics to statsd: %s; %s\n", addr, prefix)
+
 	return
 }
 
