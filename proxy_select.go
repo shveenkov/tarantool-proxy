@@ -62,8 +62,10 @@ func (p *ProxyConnection) executeRequestSelect(requestType uint32, requestID uin
 	tnt16 := p.getTnt16(args[0])
 	response, err = tnt16.Select(space.name, indexName, offset, limit, tarantool.IterEq, args)
 	if err == nil {
+		p.statsdClient.Incr("select", 1)
 		return
 	}
+	p.statsdClient.Incr("error_16", 1)
 
 	// make fault tollerance requests
 	for _, tnt16i := range p.getTnt16Pool(args[0]) {
@@ -73,8 +75,10 @@ func (p *ProxyConnection) executeRequestSelect(requestType uint32, requestID uin
 
 		response, err = tnt16i.Select(space.name, indexName, offset, limit, tarantool.IterEq, args)
 		if err == nil {
+			p.statsdClient.Incr("select", 1)
 			break
 		}
+		p.statsdClient.Incr("error_16", 1)
 	}
 	return
 }

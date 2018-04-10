@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"io/ioutil"
 	"log"
 	"net"
 	"os"
@@ -10,19 +11,18 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
-
-	"github.com/tarantool/go-tarantool"
 	"time"
 
+	"github.com/quipo/statsd"
+	"github.com/tarantool/go-tarantool"
 	"gopkg.in/yaml.v2"
-	"io/ioutil"
-	"runtime/pprof"
 
 	"net/http"
 	_ "net/http/pprof"
+	"runtime/pprof"
 )
 
-func tarantoolListen(netLoc string, listenNum int, tntPool [][]*tarantool.Connection, schema *Schema) {
+func tarantoolListen(netLoc string, listenNum int, tntPool [][]*tarantool.Connection, schema *Schema, statsdClient statsd.Statsd) {
 	listener, err := net.Listen("tcp", netLoc)
 	if err != nil {
 		log.Fatalf("ERROR: Listen - %s", err)
@@ -39,10 +39,27 @@ func tarantoolListen(netLoc string, listenNum int, tntPool [][]*tarantool.Connec
 		go func() {
 			defer conn.Close()
 
-			proxy := newProxyConnection(conn, listenNum, tntPool, schema)
+			proxy := newProxyConnection(conn, listenNum, tntPool, schema, statsdClient)
 			proxy.processIproto()
 		}()
 	}
+}
+
+func createStatsdClient(addr, prefix string) (client statsd.Statsd) {
+	if addr == "" {
+		client = statsd.NoopClient{}
+		return
+	}
+	statsdSock := statsd.NewStatsdClient(addr, prefix)
+	err := statsdSock.CreateSocket()
+	if err != nil {
+		log.Printf("error create statsd socket: %s\n", err)
+		client = statsd.NoopClient{}
+		return
+	}
+	interval := time.Second * 2 // aggregate stats and flush every 2 seconds
+	client = statsd.NewStatsdBuffer(interval, statsdSock)
+	return
 }
 
 func main() {
@@ -185,9 +202,12 @@ func main() {
 		}
 	}()
 
+	statsdClient := createStatsdClient(ProxyConfig.Statsd.Server, ProxyConfig.Statsd.Prefix)
+	defer statsdClient.Close()
+
 	for listenNum, netLoc := range ProxyConfig.Listen15 {
 		log.Printf("listen_15 %s\n", netLoc)
-		go tarantoolListen(netLoc, listenNum, tntConnectionPool, NewSchema(&ProxyConfig))
+		go tarantoolListen(netLoc, listenNum, tntConnectionPool, NewSchema(&ProxyConfig), statsdClient)
 	}
 
 	chSignal := make(chan os.Signal, 1)
