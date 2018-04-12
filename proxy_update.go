@@ -84,6 +84,9 @@ func (p *ProxyConnection) executeRequestUpdate(requestType uint32, requestID uin
 	tnt16 := p.getTnt16Master(keyTuple[0])
 
 	response, err = tnt16.Update(space.name, indexName, keyTuple, args)
+	p.statsdClient.Incr("update", 1)
+	if err != nil {
+		p.statsdClient.Incr("error_16", 1)
+	}
 	return
 }
-

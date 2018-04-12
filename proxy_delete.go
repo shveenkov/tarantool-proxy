@@ -46,5 +46,9 @@ func (p *ProxyConnection) executeRequestDelete(requestType uint32, requestID uin
 	tnt16 := p.getTnt16Master(args[0])
 
 	response, err = tnt16.Delete(space.name, indexName, args)
+	p.statsdClient.Incr("delete", 1)
+	if err != nil {
+		p.statsdClient.Incr("error_16", 1)
+	}
 	return
 }

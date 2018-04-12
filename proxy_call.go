@@ -52,5 +52,9 @@ func (p *ProxyConnection) executeRequestCall(requestType uint32, requestID uint3
 	}
 
 	response, err = tnt16.Call(procName, args)
+	p.statsdClient.Incr("call", 1)
+	if err != nil {
+		p.statsdClient.Incr("error_16", 1)
+	}
 	return
 }

@@ -47,5 +47,9 @@ func (p *ProxyConnection) executeRequestInsert(requestType uint32, requestID uin
 		}
 		response, err = tnt16.Upsert(space.name, args, upsertArgs)
 	}
+	p.statsdClient.Incr("insert", 1)
+	if err != nil {
+		p.statsdClient.Incr("error_16", 1)
+	}
 	return
 }

@@ -28,7 +28,8 @@ type ProxyConnection struct {
 	schema       *Schema
 	tntPool      [][]*tarantool.Connection
 	tntPoolLen   uint32
-	listenNum    int // sharding data
+	listenNum    int           // sharding data
+	statsdClient statsd.Statsd // statsd client for send metrics
 }
 
 // Response iproto package
@@ -47,8 +48,6 @@ var bytesBufferPool = sync.Pool{
 	New: func() interface{} { return bytes.NewBuffer(make([]byte, 0, 64)) },
 }
 
-var statsdClient = statsd.NewStatsdClient("localhost:8125", "prefix")
-
 func getBytesBufferFromPool() (b *bytes.Buffer) {
 	ifc := bytesBufferPool.Get()
 	if ifc != nil {
@@ -64,7 +63,7 @@ func putBytesBufferToPool(b *bytes.Buffer) {
 	}
 }
 
-func newProxyConnection(conn io.ReadWriteCloser, listenNum int, tntPool [][]*tarantool.Connection, schema *Schema) *ProxyConnection {
+func newProxyConnection(conn io.ReadWriteCloser, listenNum int, tntPool [][]*tarantool.Connection, schema *Schema, statsdClient statsd.Statsd) *ProxyConnection {
 	proxy := &ProxyConnection{
 		reader: bufio.NewReaderSize(conn, 8*1024),
 		writer: bufio.NewWriterSize(conn, 8*1024),
@@ -75,15 +74,16 @@ func newProxyConnection(conn io.ReadWriteCloser, listenNum int, tntPool [][]*tar
 
 		schema: schema,
 
-		tntPool:    tntPool,
-		tntPoolLen: uint32(len(tntPool)),
-		listenNum:  listenNum,
+		tntPool:      tntPool,
+		tntPoolLen:   uint32(len(tntPool)),
+		listenNum:    listenNum,
+		statsdClient: statsdClient,
 	}
 
 	return proxy
 }
 
-func getShardNum(shardingKey interface{}, lenPool uint32) uint32 {
+func (p *ProxyConnection) getShardNum(shardingKey interface{}, lenPool uint32) uint32 {
 	buf := bytes.NewBuffer(make([]byte, 0, 16))
 	v := reflect.ValueOf(shardingKey)
 	switch v.Kind() {
@@ -97,6 +97,7 @@ func getShardNum(shardingKey interface{}, lenPool uint32) uint32 {
 		buf.WriteString(strconv.FormatInt(v.Int(), 10))
 	default:
 		log.Printf("Error getShardNum for shardingKey: %v(%T)", v, v)
+		p.statsdClient.Incr("error_15", 1)
 		return 0
 	}
 	shardNum := crc32.ChecksumIEEE(buf.Bytes()) % lenPool
@@ -109,7 +110,7 @@ func (p *ProxyConnection) getTnt16Pool(shardingKey interface{}) []*tarantool.Con
 		return p.tntPool[shardNum]
 	}
 
-	shardNum := getShardNum(shardingKey, p.tntPoolLen)
+	shardNum := p.getShardNum(shardingKey, p.tntPoolLen)
 	return p.tntPool[shardNum]
 }
 
@@ -133,6 +134,7 @@ func (p *ProxyConnection) packTnt16ResponseBody(body IprotoWriter, response *tar
 		PackUint32(body, (response.Code<<8)|BadResponse15Status)
 		body.WriteString(response.Error)
 		log.Printf("error response16 code=%d %s", response.Code, response.Error)
+		p.statsdClient.Incr("error_16", 1)
 		return
 	}
 
@@ -204,6 +206,7 @@ FOR_CLIENT_POLL:
 			if len(p.chanResponse) == 0 {
 				if err := p.writer.Flush(); err != nil {
 					log.Println("client close connection")
+					p.statsdClient.Incr("error_15", 1)
 					break FOR_CLIENT_POLL
 				} //end if
 			}
@@ -223,10 +226,12 @@ FOR_CLIENT_POLL:
 
 		if _, err := p.writer.Write(header.Bytes()); err != nil {
 			log.Printf("error write response header: %s", err)
+			p.statsdClient.Incr("error_15", 1)
 		}
 
 		if _, err := p.writer.Write(response.Body); err != nil {
 			log.Printf("error write response body: %s", err)
+			p.statsdClient.Incr("error_15", 1)
 		}
 		putBytesBufferToPool(bytes.NewBuffer(response.Body))
 	} //end for
@@ -263,6 +268,7 @@ func (p *ProxyConnection) processIproto() {
 		if err != nil {
 			if err != io.EOF {
 				log.Printf("error read header15: - %s", err)
+				p.statsdClient.Incr("error_15", 1)
 			}
 			break
 		}
@@ -277,6 +283,7 @@ func (p *ProxyConnection) processIproto() {
 		if err != nil {
 			if err != io.EOF {
 				log.Printf("error read body15: - %s", err)
+				p.statsdClient.Incr("error_15", 1)
 			}
 			break
 		}

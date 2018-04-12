@@ -69,5 +69,8 @@ type ProxyConfigStruct struct {
 			Columns []uint32 `yaml:"columns,flow"`
 		}
 	} `yaml:"space,flow"`
+	Statsd struct {
+		Server string `yaml:"server"`
+		Prefix string `yaml:"prefix"`
+	} `yaml:"statsd,omitempty"`
 }
-
